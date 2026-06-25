@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Intelligent SQL Assistant</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="workspace" aria-label="SQL assistant workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Natural Language to SQL</p>
+            <h1>Intelligent SQL Assistant</h1>
+          </div>
+          <div class="db-switch" aria-label="Database dialect">
+            <button class="dialect active" type="button" data-dialect="mysql">MySQL</button>
+            <button class="dialect" type="button" data-dialect="postgresql">PostgreSQL</button>
+          </div>
+        </header>
+
+        <section class="prompt-panel">
+          <label for="promptInput">User requirement</label>
+          <textarea id="promptInput" rows="4" spellcheck="true">Show all employees whose salary is greater than 50000.</textarea>
+          <div class="prompt-actions">
+            <button type="button" class="secondary" id="loadExample">Load Example</button>
+            <button type="button" class="primary" id="generateQuery">Generate Queries</button>
+          </div>
+        </section>
+
+        <section class="schema-panel">
+          <div class="section-heading">
+            <div>
+              <h2>Database Schema</h2>
+              <p>Tables, attributes, and approximate row counts used by the assistant.</p>
+            </div>
+            <button type="button" class="secondary" id="resetSchema">Reset</button>
+          </div>
+          <textarea id="schemaInput" rows="10" spellcheck="false"></textarea>
+        </section>
+
+        <section class="results-panel">
+          <div class="section-heading">
+            <div>
+              <h2>Generated Query Options</h2>
+              <p>Select an option to inspect or run it in the simulator.</p>
+            </div>
+            <button type="button" class="secondary" id="clearHistory">Clear History</button>
+          </div>
+          <div id="queryOptions" class="query-options" aria-live="polite"></div>
+        </section>
+      </section>
+
+      <aside class="inspector" aria-label="Query inspector">
+        <section>
+          <h2>Selected Query</h2>
+          <pre id="selectedSql" class="code-block">Generate a query to begin.</pre>
+          <div class="inspector-actions">
+            <button type="button" class="secondary" id="copySql">Copy</button>
+            <button type="button" class="primary" id="executeSql">Execute</button>
+          </div>
+        </section>
+
+        <section>
+          <h2>Explanation</h2>
+          <p id="queryExplanation" class="muted">The explanation will appear here.</p>
+        </section>
+
+        <section>
+          <h2>Tables and Attributes</h2>
+          <div id="entityList" class="entity-list"></div>
+        </section>
+
+        <section>
+          <h2>Impact Analysis</h2>
+          <div id="impactBox" class="impact-box muted">Impact estimate will appear here.</div>
+        </section>
+
+        <section>
+          <h2>Validation</h2>
+          <ul id="validationList" class="validation-list"></ul>
+        </section>
+
+        <section>
+          <h2>Execution Results</h2>
+          <div id="executionResult" class="execution-result muted">No query executed yet.</div>
+        </section>
+
+        <section>
+          <h2>Query History</h2>
+          <div id="historyList" class="history-list"></div>
+        </section>
+      </aside>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
