@@ -1,0 +1,5 @@
+add 5 3 and subtract 10 4 and multiply 3 4
+if 5 > 3 then add 2 1 else subtract 4 2
+repeat 3 times multiply 2 4
+loop 5 times add 10 5
+divide 20 4
