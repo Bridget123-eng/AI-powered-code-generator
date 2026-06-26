@@ -19,7 +19,6 @@ OCR_AVAILABLE = True
 app = Flask(__name__)
 CORS(app)
 
-
 def _run_pipeline(raw_text, language="English"):
     """Single statement ya AND se joined multi-statement pipeline"""
     processed = preprocess(raw_text, language)
