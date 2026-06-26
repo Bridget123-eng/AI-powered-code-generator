@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NL Compiler — Multilingual Code Generator</title>
+  <link rel="stylesheet" href="style.css"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@300;400;500;600;700;800;900&family=Nunito:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/viz.js/2.1.2/viz.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/viz.js/2.1.2/full.render.js"></script>
+  <!-- Pyodide for live Python execution -->
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js"></script>
+  <!-- jsPDF for PDF export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+
+  <header class="site-header">
+    <div class="header-left">
+      <div class="logo-mark">&lt; NL / Compiler &gt;</div>
+      <div class="logo-divider"></div>
+      <div class="logo-sub">Multilingual · AI Compiler</div>
+    </div>
+    <div class="header-pills">
+      <span class="pill">Hindi</span>
+      <span class="pill">English</span>
+      <span class="pill">Hinglish</span>
+    </div>
+    <div class="header-status">
+      <span class="status-dot" id="status-dot"></span>
+      <span class="status-text" id="status-text">Connecting...</span>
+    </div>
+  </header>
+
+  <div class="marquee-wrap">
+    <div class="marquee-inner">
+      <span><b>HINDI</b> · <b>HINGLISH</b> · <b>ENGLISH</b> · TEXT · VOICE · FILE · IMAGE · <b>ARITHMETIC</b> · <b>LOOPS</b> · <b>CONDITIONS</b> · IR GENERATION · <b>FLOWCHART</b> · LIVE EXECUTION · PDF EXPORT · NATURAL LANGUAGE → <b>PYTHON CODE</b> · &nbsp;</span>
+      <span><b>HINDI</b> · <b>HINGLISH</b> · <b>ENGLISH</b> · TEXT · VOICE · FILE · IMAGE · <b>ARITHMETIC</b> · <b>LOOPS</b> · <b>CONDITIONS</b> · IR GENERATION · <b>FLOWCHART</b> · LIVE EXECUTION · PDF EXPORT · NATURAL LANGUAGE → <b>PYTHON CODE</b> · &nbsp;</span>
+    </div>
+  </div>
+
+  <main class="workspace">
+
+    <!-- INPUT PANEL -->
+    <aside class="glass-panel input-panel">
+
+      <div class="sec-label">Select Language</div>
+      <div class="lang-row">
+        <button class="lang-btn active" data-lang="English"><span class="lc">EN</span><span class="ln">English</span></button>
+        <button class="lang-btn" data-lang="Hindi"><span class="lc">HI</span><span class="ln">Hindi</span></button>
+        <button class="lang-btn" data-lang="Hinglish"><span class="lc">HI·EN</span><span class="ln">Hinglish</span></button>
+      </div>
+
+      <div class="sec-label" style="margin-top:24px">Input Mode</div>
+      <div class="mode-bar">
+        <button class="mode-btn active" data-mode="text">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>Text
+        </button>
+        <button class="mode-btn" data-mode="voice">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>Voice
+        </button>
+        <button class="mode-btn" data-mode="file">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>File
+        </button>
+        <button class="mode-btn" data-mode="image">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>Image
+        </button>
+      </div>
+
+      <div class="mode-pane active" id="pane-text">
+        <textarea id="text-input" placeholder="Type your instruction here...&#10;&#10;Examples:&#10;  add 5 3&#10;  if 5 > 3 then add 2 1 else subtract 4 2&#10;  repeat 3 times multiply 2 4&#10;  add 5 3 and subtract 10 4"></textarea>
+      </div>
+
+      <div class="mode-pane" id="pane-voice">
+        <div class="voice-center">
+          <button class="voice-orb" id="voice-btn">
+            <div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div>
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          </button>
+          <div class="voice-label" id="voice-label">Tap to Speak</div>
+          <div class="voice-transcript" id="voice-transcript"></div>
+          <div class="voice-tip">🌐 Chrome browser · No commas · Speak clearly</div>
+        </div>
+      </div>
+
+      <div class="mode-pane" id="pane-file">
+        <div class="drop-zone" id="file-zone">
+          <input type="file" id="file-input" accept=".txt" hidden/>
+          <div class="dz-icon">📄</div>
+          <div class="dz-title">Drop .txt file here</div>
+          <div class="dz-sub">or click to browse</div>
+          <div class="dz-name" id="file-name"></div>
+        </div>
+      </div>
+
+      <div class="mode-pane" id="pane-image">
+        <div class="drop-zone" id="image-zone">
+          <input type="file" id="image-input" accept="image/*" hidden/>
+          <div class="dz-icon">🖼️</div>
+          <div class="dz-title">Drop image here</div>
+          <div class="dz-sub">PNG · JPG · JPEG</div>
+          <div id="img-preview-wrap" style="display:none;margin-top:12px">
+            <img id="img-preview" src="" style="max-height:110px;border-radius:8px;max-width:100%"/>
+          </div>
+        </div>
+      </div>
+
+      <button class="compile-btn" id="compile-btn">
+        <span>Compile</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </button>
+
+      <div class="sec-label" style="margin-top:24px">Quick Examples</div>
+      <div class="chips">
+        <div class="chip" data-val="add 5 3">add 5 3</div>
+        <div class="chip" data-val="subtract 10 4">subtract 10 4</div>
+        <div class="chip" data-val="multiply 3 4">multiply 3 4</div>
+        <div class="chip" data-val="if 5 > 3 then add 2 1 else subtract 4 2">if–else</div>
+        <div class="chip" data-val="repeat 3 times multiply 2 4">loop</div>
+        <div class="chip" data-val="add 5 3 and subtract 10 4 and multiply 2 6">multiple</div>
+        <div class="chip" data-val="paanch aur teen jodo">Hindi</div>
+        <div class="chip" data-val="add paanch aur teen">Hinglish</div>
+      </div>
+
+    </aside>
+
+    <!-- OUTPUT PANEL -->
+    <section class="glass-panel output-panel">
+
+      <div class="placeholder" id="placeholder">
+        <div class="ph-visual">
+          <div class="ph-node n1"></div>
+          <div class="ph-node n2"></div>
+          <div class="ph-node n3"></div>
+          <div class="ph-line l1"></div>
+          <div class="ph-line l2"></div>
+        </div>
+        <div class="ph-title">Ready to Compile</div>
+        <div class="ph-sub">Enter an instruction and click Compile<br/>to generate Python code and flowchart ✨</div>
+      </div>
+
+      <div class="loading-state" id="loading" style="display:none">
+        <div class="bars">
+          <div class="bar" style="--i:0"></div><div class="bar" style="--i:1"></div>
+          <div class="bar" style="--i:2"></div><div class="bar" style="--i:3"></div>
+          <div class="bar" style="--i:4"></div><div class="bar" style="--i:5"></div>
+          <div class="bar" style="--i:6"></div><div class="bar" style="--i:7"></div>
+        </div>
+        <div class="loading-text">Compiling your instruction...</div>
+      </div>
+
+      <!-- ERROR with suggestion -->
+      <div class="error-state" id="error-state" style="display:none">
+        <div class="err-badge">Error</div>
+        <div class="err-msg" id="err-msg"></div>
+        <div class="err-suggestion" id="err-suggestion" style="display:none">
+          <span class="suggestion-label">💡 Suggestion:</span>
+          <span class="suggestion-text" id="suggestion-text"></span>
+          <button class="suggestion-btn" id="suggestion-btn">Use this</button>
+        </div>
+      </div>
+
+      <div class="output-content" id="output-content" style="display:none">
+
+        <!-- Action buttons row -->
+        <div class="action-row">
+          <button class="action-btn run-btn" id="run-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Run Code
+          </button>
+          <button class="action-btn pdf-btn" id="pdf-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            Export PDF
+          </button>
+          <button class="action-btn speak-btn" id="speak-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+            Read Aloud
+          </button>
+        </div>
+
+        <!-- Live Execution Output -->
+        <div class="exec-panel" id="exec-panel" style="display:none">
+          <div class="exec-header">
+            <span class="exec-title">▶ Live Output</span>
+            <span class="exec-status" id="exec-status">Running...</span>
+          </div>
+          <pre class="exec-output" id="exec-output"></pre>
+        </div>
+
+        <div class="sec-label" style="margin-top:20px">Compilation Pipeline</div>
+        <div class="pipeline">
+          <div class="step-card">
+            <div class="step-hd" onclick="toggleStep(this)"><span class="sn">01</span><span class="st">Preprocessed</span><span class="sc">▾</span></div>
+            <div class="step-bd"><pre id="out-pre"></pre></div>
+          </div>
+          <div class="step-card">
+            <div class="step-hd" onclick="toggleStep(this)"><span class="sn">02</span><span class="st">Tokens</span><span class="sc">▾</span></div>
+            <div class="step-bd"><div class="tok-wrap" id="out-tokens"></div></div>
+          </div>
+          <div class="step-card">
+            <div class="step-hd" onclick="toggleStep(this)"><span class="sn">03</span><span class="st">Mapped Tokens</span><span class="sc">▾</span></div>
+            <div class="step-bd"><div class="tok-wrap" id="out-mapped"></div></div>
+          </div>
+          <div class="step-card">
+            <div class="step-hd" onclick="toggleStep(this)"><span class="sn">04</span><span class="st">Intermediate Representation</span><span class="sc">▾</span></div>
+            <div class="step-bd"><pre id="out-ir"></pre></div>
+          </div>
+        </div>
+
+        <div class="sec-label" style="margin-top:26px">Generated Python Code</div>
+        <div class="code-card">
+          <div class="code-bar">
+            <div class="mac-dots">
+              <span class="mac-dot" style="background:#ff5f57"></span>
+              <span class="mac-dot" style="background:#ffbd2e"></span>
+              <span class="mac-dot" style="background:#28ca41"></span>
+            </div>
+            <span class="code-fname">output.py</span>
+            <button class="copy-btn" id="copy-btn">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              Copy
+            </button>
+          </div>
+          <pre class="code-body" id="out-code"></pre>
+        </div>
+
+        <div class="sec-label" style="margin-top:26px">Execution Flowchart</div>
+        <div class="fc-card" id="out-flowchart"><div>Rendering flowchart...</div></div>
+
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <span>NL Compiler &nbsp;·&nbsp; Multilingual Natural Language → Python Code Generator</span>
+    <span>Hindi · Hinglish · English &nbsp;·&nbsp; Made with ♥</span>
+  </footer>
+
+  <!-- HISTORY TOGGLE BUTTON -->
+  <button class="history-toggle" id="history-toggle">HISTORY</button>
+
+  <!-- HISTORY OVERLAY -->
+  <div class="history-overlay" id="history-overlay"></div>
+
+  <!-- HISTORY DRAWER -->
+  <div class="history-drawer" id="history-drawer">
+    <div class="history-header">
+      <div class="history-title">📋 History</div>
+      <button class="history-close" id="history-close">&times;</button>
+    </div>
+    <div class="history-count" id="history-count">0 compilations</div>
+    <div class="history-list" id="history-list">
+      <div class="history-empty">
+        <div class="empty-icon">🕐</div>
+        <div>No history yet.<br/>Compile something first!</div>
+      </div>
+    </div>
+    <div class="history-footer">
+      <button class="clear-all-btn" id="clear-all-btn">🗑 Clear All History</button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
