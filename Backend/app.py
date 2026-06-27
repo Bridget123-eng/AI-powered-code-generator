@@ -165,3 +165,61 @@ def compile_image():
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
+    
+    history = []
+
+@app.route("/generate", methods=["POST"])
+def generate():
+
+    data = request.json
+
+    prompt = data["prompt"]
+
+    result = generate_code(prompt)
+
+    history.append({
+        "prompt": prompt
+    })
+
+    return jsonify({
+        "code": result
+    })
+
+@app.route("/explain", methods=["POST"])
+def explain():
+
+    code = request.json["code"]
+
+    explanation = explain_code(code)
+
+    return jsonify({
+        "explanation": explanation
+    })
+
+@app.route("/optimize", methods=["POST"])
+def optimize():
+
+    code = request.json["code"]
+
+    optimized = optimize_code(code)
+
+    return jsonify({
+        "optimized": optimized
+    })
+
+@app.route("/debug", methods=["POST"])
+def debug():
+
+    code = request.json["code"]
+
+    result = debug_python(code)
+
+    return jsonify(result)
+
+@app.route("/history", methods=["GET"])
+def get_history():
+
+    return jsonify(history)
+
+if __name__ == "__main__":
+    app.run(debug=True)
