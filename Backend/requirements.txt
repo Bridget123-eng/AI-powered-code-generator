@@ -1,0 +1,14 @@
+flask
+flask-cors
+openai
+transformers
+torch
+pylint
+autopep8
+black
+pymongo
+sqlalchemy
+markdown
+speechrecognition
+pytesseract
+graphviz
