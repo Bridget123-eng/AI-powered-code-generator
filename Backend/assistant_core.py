@@ -58,7 +58,7 @@ def generate_code_from_prompt(prompt):
     if not clean_prompt:
         raise ValueError("Prompt is required.")
 
-    if "sql" in lowered or _looks_like_sql_request(lowered):
+    if is_sql_request(lowered):
         sql_result = generate_sql(clean_prompt)
         return sql_result["options"][0]["query"]
 
@@ -207,13 +207,18 @@ def generate_sql(prompt, schema=None, dialect="mysql"):
     options = []
 
     if intent == "UPDATE":
-        column = _find_column(lowered, columns, fallback="Salary")
+        column = _target_update_column(lowered, columns)
         where_column, where_value = _infer_filter(lowered, columns)
         percent = _extract_percent(lowered, default=10)
-        factor = 1 + (percent / 100)
-        if "decrease" in lowered or "reduce" in lowered:
-            factor = 1 - (percent / 100)
-        query = f"UPDATE {table}\nSET {column} = {column} * {factor:.2f}\nWHERE {where_column} = '{where_value}';"
+        explicit_value = _extract_set_value(lowered, column)
+        if explicit_value is not None and not any(word in lowered for word in ["increase", "decrease", "reduce"]):
+            set_clause = f"{column} = {_sql_literal(explicit_value)}"
+        else:
+            factor = 1 + (percent / 100)
+            if "decrease" in lowered or "reduce" in lowered:
+                factor = 1 - (percent / 100)
+            set_clause = f"{column} = {column} * {factor:.2f}"
+        query = f"UPDATE {table}\nSET {set_clause}\nWHERE {where_column} = {_sql_literal(where_value)};"
         options.append(_sql_option(
             query,
             table,
@@ -225,7 +230,7 @@ def generate_sql(prompt, schema=None, dialect="mysql"):
         ))
     elif intent == "DELETE":
         where_column, where_value = _infer_filter(lowered, columns)
-        query = f"DELETE FROM {table}\nWHERE {where_column} = '{where_value}';"
+        query = f"DELETE FROM {table}\nWHERE {where_column} = {_sql_literal(where_value)};"
         options.append(_sql_option(
             query,
             table,
@@ -259,30 +264,36 @@ def generate_sql(prompt, schema=None, dialect="mysql"):
             1,
             "returned",
         ))
-    elif "top" in lowered or "highest" in lowered:
+    elif _aggregate_sql(lowered, table, columns):
+        query, selected_columns, explanation, estimate = _aggregate_sql(lowered, table, columns)
+        options.append(_sql_option(query, table, selected_columns, explanation, estimate, "returned"))
+    elif "top" in lowered or "highest" in lowered or "lowest" in lowered:
         limit_match = re.search(r"top\s+(\d+)", lowered)
-        limit = int(limit_match.group(1)) if limit_match else 5
+        limit = int(limit_match.group(1)) if limit_match else 1 if ("highest" in lowered or "lowest" in lowered) else 5
         order_column = _find_column(lowered, columns, fallback=columns[-1])
-        query = f"SELECT *\nFROM {table}\nORDER BY {order_column} DESC\n{_limit_clause(limit, dialect)};"
+        direction = "ASC" if "lowest" in lowered else "DESC"
+        selected_columns = _select_columns(lowered, columns)
+        query = f"SELECT {', '.join(selected_columns)}\nFROM {table}\nORDER BY {order_column} {direction}\n{_limit_clause(limit, dialect)};"
         options.append(_sql_option(
             query,
             table,
-            columns,
+            selected_columns,
             f"Returns top {limit} records based on {order_column}.",
             min(limit, row_count),
             "returned",
         ))
     else:
         where = _comparison_filter(lowered, columns)
+        selected_columns = _select_columns(lowered, columns)
         if where:
-            query = f"SELECT *\nFROM {table}\nWHERE {where};"
+            query = f"SELECT {', '.join(selected_columns)}\nFROM {table}\nWHERE {where};"
             explanation = f"Displays records from {table} where {where}."
             estimate = max(1, row_count // 10)
         else:
-            query = f"SELECT *\nFROM {table};"
+            query = f"SELECT {', '.join(selected_columns)}\nFROM {table};"
             explanation = f"Returns all records from {table}."
             estimate = row_count
-        options.append(_sql_option(query, table, columns, explanation, estimate, "returned"))
+        options.append(_sql_option(query, table, selected_columns, explanation, estimate, "returned"))
 
     if options[0]["query"].startswith("SELECT *"):
         column_list = ", ".join(columns)
@@ -318,7 +329,8 @@ def parse_schema(schema_text):
         if row_match:
             rows = int(row_match.group(1))
             line = line[:row_match.start()].strip()
-        match = re.match(r"([A-Za-z_][A-Za-z0-9_]*)\s*\((.+)\)", line)
+        create_match = re.match(r"create\s+table\s+([A-Za-z_][A-Za-z0-9_]*)\s*\((.+)\)\s*;?", line, re.IGNORECASE)
+        match = create_match or re.match(r"([A-Za-z_][A-Za-z0-9_]*)\s*\((.+)\)", line)
         if not match:
             continue
         table = match.group(1)
@@ -376,8 +388,19 @@ def _function_name_from_prompt(text):
     return "_".join(useful[:4]) or "generated_function"
 
 
+def is_sql_request(text):
+    lowered = (text or "").lower()
+    return "sql" in lowered or _looks_like_sql_request(lowered)
+
+
 def _looks_like_sql_request(text):
-    return any(word in text for word in ["query", "table", "employee", "student", "salary", "cgpa", "select", "update", "delete", "insert"])
+    sql_words = [
+        "query", "table", "employee", "employees", "student", "students",
+        "salary", "cgpa", "select", "update", "delete", "insert", "where",
+        "department", "semester", "highest", "lowest", "average", "count",
+        "show", "list", "find", "display",
+    ]
+    return any(word in text for word in sql_words)
 
 
 def _normalize_text(text):
@@ -385,9 +408,9 @@ def _normalize_text(text):
 
 
 def _detect_sql_intent(text):
-    if any(word in text for word in ["insert", "add new", "create record"]):
+    if any(word in text for word in ["insert", "add new", "create record", "add record"]):
         return "INSERT"
-    if any(word in text for word in ["increase", "decrease", "reduce", "update", "set "]):
+    if any(word in text for word in ["increase", "decrease", "reduce", "update", "set ", "change"]):
         return "UPDATE"
     if any(word in text for word in ["delete", "remove"]):
         return "DELETE"
@@ -407,8 +430,18 @@ def _find_table(text, schema):
 
 
 def _find_column(text, columns, fallback):
+    aliases = {
+        "name": ["names", "employee name", "student name"],
+        "salary": ["salaries", "pay", "income"],
+        "department": ["dept", "department"],
+        "cgpa": ["gpa", "grade"],
+        "semester": ["sem"],
+        "id": ["employee id", "student id"],
+    }
     for column in columns:
-        if column.lower() in text:
+        column_name = column.lower()
+        terms = [column_name] + aliases.get(column_name, [])
+        if any(re.search(rf"\b{re.escape(term)}\b", text) for term in terms):
             return column
     for column in columns:
         if column.lower() == fallback.lower():
@@ -417,31 +450,71 @@ def _find_column(text, columns, fallback):
 
 
 def _infer_filter(text, columns):
-    if "it department" in text and _has_column(columns, "Department"):
-        return _find_column("department", columns, fallback="Department"), "IT"
+    for column in columns:
+        column_name = column.lower()
+        match = re.search(rf"(?:where|for|with|whose)\s+{re.escape(column_name)}\s*(?:is|=|to)?\s*['\"]?([a-zA-Z0-9_. -]+)", text)
+        if match:
+            return column, _clean_filter_value(match.group(1), columns)
+
+    if _has_column(columns, "Department"):
+        dept_col = _find_column("department", columns, fallback="Department")
+        for pattern in [
+            r"(?:department|dept)\s+(?:is|=|as|of|named|called)?\s*['\"]?([a-zA-Z][a-zA-Z0-9_ -]*)",
+            r"(?:in|from|for)\s+['\"]?([a-zA-Z][a-zA-Z0-9_ -]*)\s+(?:department|dept)",
+        ]:
+            dept_match = re.search(pattern, text)
+            if dept_match:
+                return dept_col, _clean_filter_value(dept_match.group(1), columns)
+        if re.search(r"\bit\b", text):
+            return dept_col, "IT"
+
+    comparison = _comparison_filter(text, columns, allow_literal=False)
+    if comparison:
+        column = comparison.split()[0]
+        value = comparison.rsplit(" ", 1)[-1].strip("'")
+        return column, value
+
     dept_match = re.search(r"(?:department|dept)\s+(?:is|=|as|of)?\s*['\"]?([a-zA-Z0-9_]+)", text)
     if dept_match and _has_column(columns, "Department"):
         return _find_column("department", columns, fallback="Department"), dept_match.group(1).upper()
 
     for column in columns:
         if column.lower() in text:
-            match = re.search(rf"{column.lower()}\s+(?:is|=|by|of)?\s*['\"]?([a-zA-Z0-9_]+)", text)
+            match = re.search(rf"{column.lower()}\s+(?:is|=|by|of|to)?\s*['\"]?([a-zA-Z0-9_. -]+)", text)
             if match:
-                return column, match.group(1).strip()
+                return column, _clean_filter_value(match.group(1), columns)
     return columns[0], "<value>"
 
 
-def _comparison_filter(text, columns):
-    column = _find_column(text, columns, fallback="Salary" if _has_column(columns, "Salary") else columns[-1])
-    number_match = re.search(r"(?:greater than|above|more than|over|exceeds?)\s+(?:rs\s*)?[$]?\s*(\d+(?:\.\d+)?)", text)
-    if number_match:
-        return f"{column} > {number_match.group(1)}"
-    number_match = re.search(r"(?:less than|below|under)\s+(?:rs\s*)?[$]?\s*(\d+(?:\.\d+)?)", text)
-    if number_match:
-        return f"{column} < {number_match.group(1)}"
-    where_column, where_value = _infer_filter(text, columns)
-    if where_value != "<value>":
-        return f"{where_column} = '{where_value}'"
+def _comparison_filter(text, columns, allow_literal=True):
+    column = _find_comparison_column(text, columns)
+    operators = [
+        (r"(?:greater than or equal to|at least|minimum)\s+(?:rs\s*)?[$]?\s*(\d+(?:\.\d+)?)", ">="),
+        (r"(?:less than or equal to|at most|maximum)\s+(?:rs\s*)?[$]?\s*(\d+(?:\.\d+)?)", "<="),
+        (r"(?:greater than|above|more than|over|exceeds?)\s+(?:rs\s*)?[$]?\s*(\d+(?:\.\d+)?)", ">"),
+        (r"(?:less than|below|under)\s+(?:rs\s*)?[$]?\s*(\d+(?:\.\d+)?)", "<"),
+        (r"(?:equal to|equals|is|=)\s+(?:rs\s*)?[$]?\s*(\d+(?:\.\d+)?)", "="),
+    ]
+    for pattern, operator in operators:
+        number_match = re.search(pattern, text)
+        if number_match:
+            return f"{column} {operator} {number_match.group(1)}"
+
+    symbolic = re.search(rf"\b{re.escape(column.lower())}\b\s*(>=|<=|=|>|<)\s*(?:rs\s*)?[$]?\s*(\d+(?:\.\d+)?)", text)
+    if symbolic:
+        return f"{column} {symbolic.group(1)} {symbolic.group(2)}"
+
+    if not allow_literal:
+        return None
+
+    negative = re.search(r"\bnot\s+(?:in|from)\s+['\"]?([a-zA-Z][a-zA-Z0-9_ -]*)\s+(?:department|dept)", text)
+    if negative and _has_column(columns, "Department"):
+        return f"{_find_column('department', columns, fallback='Department')} <> {_sql_literal(_clean_filter_value(negative.group(1), columns))}"
+
+    dept_col, dept_value = _infer_filter(text, columns)
+    if dept_value != "<value>" and _has_column(columns, dept_col):
+        return f"{dept_col} = {_sql_literal(dept_value)}"
+
     return None
 
 
@@ -481,13 +554,148 @@ def _extract_percent(text, default):
     return float(match.group(1)) if match else float(default)
 
 
+def _extract_set_value(text, column):
+    column_name = column.lower()
+    patterns = [
+        rf"{re.escape(column_name)}\s+(?:to|=|as)\s*['\"]?([a-zA-Z0-9_. -]+)",
+        r"(?:set|change|update)\s+\w+\s+(?:to|=|as)\s*['\"]?([a-zA-Z0-9_. -]+)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            return _clean_filter_value(match.group(1), [])
+    return None
+
+
+def _target_update_column(text, columns):
+    for pattern in [
+        r"(?:set|change|update|increase|decrease|reduce)\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+        r"([a-zA-Z_][a-zA-Z0-9_]*)\s+(?:to|=)\s*['\"]?[a-zA-Z0-9_. -]+",
+    ]:
+        match = re.search(pattern, text)
+        if match:
+            candidate = _find_column(match.group(1), columns, fallback="")
+            if candidate in columns and candidate.lower() not in {"id", "employeeid", "studentid"}:
+                return candidate
+    return _find_column(text, columns, fallback="Salary")
+
+
 def _infer_insert_values(text, columns):
     insert_columns = [column for column in columns if column.lower() not in {"id", "employeeid", "studentid"}]
     values = []
     for column in insert_columns:
         match = re.search(rf"{column.lower()}\s+(?:is|=|as)?\s*['\"]?([a-zA-Z0-9_.-]+)", text)
-        values.append(match.group(1) if match else f"<{column}>")
+        values.append(_clean_filter_value(match.group(1), columns) if match else f"<{column}>")
     return insert_columns, values
+
+
+def _select_columns(text, columns):
+    if re.search(r"\b(names?|who)\b", text) and _has_column(columns, "Name"):
+        return [_find_column("name", columns, fallback="Name")]
+
+    if re.search(r"\b(all|everything|full record|complete record|employees|students|records|rows)\b", text):
+        return ["*"]
+
+    if re.search(r"\b(all|everything|full record|complete record)\b", text):
+        return ["*"]
+
+    selected = []
+    for column in columns:
+        column_name = column.lower()
+        if re.search(rf"\b{re.escape(column_name)}s?\b", text):
+            selected.append(column)
+
+    if selected:
+        return selected
+
+    return ["*"]
+
+
+def _aggregate_sql(text, table, columns):
+    group_column = None
+    if re.search(r"\b(each|per|by|wise|group by)\b", text):
+        if _has_column(columns, "Department") and "department" in text:
+            group_column = _find_column("department", columns, fallback="Department")
+        elif _has_column(columns, "Semester") and "semester" in text:
+            group_column = _find_column("semester", columns, fallback="Semester")
+
+    aggregate_column = _find_column(text, columns, fallback="Salary" if _has_column(columns, "Salary") else columns[-1])
+    aggregate = None
+    alias = None
+    if any(word in text for word in ["average", "avg", "mean"]):
+        aggregate = f"AVG({aggregate_column})"
+        alias = f"Average{aggregate_column}"
+    elif any(word in text for word in ["total", "sum"]):
+        aggregate = f"SUM({aggregate_column})"
+        alias = f"Total{aggregate_column}"
+    elif "count" in text or "number of" in text or "how many" in text:
+        aggregate = "COUNT(*)"
+        alias = "TotalCount"
+    elif "minimum" in text or "min " in text:
+        aggregate = f"MIN({aggregate_column})"
+        alias = f"Minimum{aggregate_column}"
+    elif "maximum" in text or "max " in text:
+        aggregate = f"MAX({aggregate_column})"
+        alias = f"Maximum{aggregate_column}"
+
+    if not aggregate:
+        return None
+
+    has_filter = re.search(r"\b(where|with|whose|having|greater than|above|more than|over|less than|below|under|at least|at most|>=|<=|>|<)\b", text)
+    where = _comparison_filter(text, columns) if has_filter else None
+    selected = [f"{aggregate} AS {alias}"]
+    if group_column:
+        selected.insert(0, group_column)
+
+    query = f"SELECT {', '.join(selected)}\nFROM {table}"
+    if where:
+        query += f"\nWHERE {where}"
+    if group_column:
+        query += f"\nGROUP BY {group_column}"
+    query += ";"
+
+    explanation = f"Returns {alias}"
+    if group_column:
+        explanation += f" grouped by {group_column}"
+    explanation += "."
+    return query, [group_column, aggregate_column] if group_column else [aggregate_column], explanation, 1
+
+
+def _clean_filter_value(value, columns):
+    value = str(value).strip().strip("'\"")
+    value = re.split(r"\b(?:where|with|whose|having|and|for|set|to|salary|cgpa|semester|id)\b", value, maxsplit=1)[0].strip()
+    if value.lower() == "it":
+        return "IT"
+    if re.fullmatch(r"\d+(?:\.\d+)?", value):
+        return value
+    known_columns = {column.lower() for column in columns}
+    if value.lower() in known_columns:
+        return value
+    return value.title() if len(value) > 2 else value.upper()
+
+
+def _find_comparison_column(text, columns):
+    comparison_words = [
+        "greater than", "above", "more than", "over", "exceed", "less than",
+        "below", "under", "equal to", "equals", "at least", "at most",
+        ">=", "<=", ">", "<", "=",
+    ]
+    best = None
+    best_distance = None
+    for column in columns:
+        column_name = column.lower()
+        for column_match in re.finditer(rf"\b{re.escape(column_name)}\b", text):
+            for word in comparison_words:
+                op_index = text.find(word, column_match.end())
+                if op_index == -1:
+                    continue
+                distance = op_index - column_match.end()
+                if best_distance is None or distance < best_distance:
+                    best = column
+                    best_distance = distance
+    if best:
+        return best
+    return _find_column(text, columns, fallback="Salary" if _has_column(columns, "Salary") else columns[-1])
 
 
 def _sql_literal(value):

@@ -36,7 +36,7 @@ export default function App() {
             setStatus={setStatus}
             onHistoryChanged={onHistoryChanged}
           />
-          <OCRUpload apiUrl={API_URL} setCode={setCode} setStatus={setStatus} />
+          <OCRUpload apiUrl={API_URL} setCode={setCode} setStatus={setStatus} onHistoryChanged={onHistoryChanged} />
           <DebugPanel apiUrl={API_URL} code={code} setCode={setCode} setStatus={setStatus} />
         </div>
 

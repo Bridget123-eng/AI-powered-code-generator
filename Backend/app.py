@@ -10,6 +10,7 @@ from assistant_core import (
     generate_code_from_prompt,
     generate_documentation,
     generate_sql,
+    is_sql_request,
     optimize_code,
     review_code,
 )
@@ -32,6 +33,27 @@ history = []
 
 
 def _run_pipeline(raw_text, language="English"):
+    if is_sql_request(raw_text):
+        sql_result = generate_sql(raw_text)
+        query = sql_result["options"][0]["query"]
+        return {
+            "success": True,
+            "steps": {
+                "input": raw_text,
+                "preprocessed": raw_text.strip(),
+                "tokens": [],
+                "mapped_tokens": [],
+                "parsed": {"type": "SQL", "intent": sql_result["intent"]},
+                "semantic": sql_result,
+                "ir": [{"op": "SQL", "intent": sql_result["intent"], "query": query}],
+                "code": query,
+                "flowchart": "",
+            },
+            "code": query,
+            "sql": sql_result,
+            "flowchart": "",
+        }
+
     processed = preprocess(raw_text, language)
     tokens = lexical_analysis(processed)
     mapped = map_language(tokens)

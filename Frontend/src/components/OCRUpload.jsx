@@ -1,6 +1,6 @@
 import axios from "axios";
 
-export default function OCRUpload({ apiUrl, setCode, setStatus }) {
+export default function OCRUpload({ apiUrl, setCode, setStatus, onHistoryChanged }) {
   const uploadImage = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -13,6 +13,7 @@ export default function OCRUpload({ apiUrl, setCode, setStatus }) {
       const res = await axios.post(`${apiUrl}/compile-image`, formData);
       setCode(res.data.code || res.data.steps?.code || "");
       setStatus(res.data.extracted_text ? `Extracted: ${res.data.extracted_text}` : "Image processed.");
+      onHistoryChanged?.();
     } catch (error) {
       setStatus(error.response?.data?.error || "Image upload failed.");
     }

@@ -26,11 +26,26 @@ export default function DebugPanel({ apiUrl, code, setStatus }) {
 
       {report && (
         <div className="details-box compact">
-          <strong>{report.status || report.quality}</strong>
+          <strong>Quality Status: {report.status || report.quality}</strong>
           {report.message && <p>{report.message}</p>}
-          {(report.suggestions || report.issues || []).map((item) => (
-            <p className="muted" key={item}>{item}</p>
-          ))}
+          
+          {(report.suggestions || report.issues || []).length > 0 && (
+            <div className="report-section">
+              <span className="section-label">Issues & Suggestions:</span>
+              {(report.suggestions || report.issues || []).map((item) => (
+                <p className="muted" key={item}>• {item}</p>
+              ))}
+            </div>
+          )}
+
+          {report.refactoring && report.refactoring.length > 0 && (
+            <div className="report-section" style={{ marginTop: "10px" }}>
+              <span className="section-label">Refactoring & Improvements:</span>
+              {report.refactoring.map((item) => (
+                <p className="muted" key={item}>• {item}</p>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </section>

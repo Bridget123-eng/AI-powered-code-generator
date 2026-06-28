@@ -3,7 +3,9 @@ import os
 from PIL import Image
 import tempfile
 
-TESSERACT_PATH = r'C:\Users\saini\OneDrive\Desktop\Compiler_p\tesseract.exe'
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+_local_path = os.path.abspath(os.path.join(_current_dir, "..", "tesseract.exe"))
+TESSERACT_PATH = _local_path if os.path.exists(_local_path) else r'C:\Users\saini\OneDrive\Desktop\Compiler_p\tesseract.exe'
 
 def extract_text_from_image(image_bytes):
     try:
