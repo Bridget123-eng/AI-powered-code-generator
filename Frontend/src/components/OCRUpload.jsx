@@ -1,33 +1,29 @@
 import axios from "axios";
 
-export default function OCRUpload({ setCode }) {
-
-  const uploadImage = async (e) => {
-
-    const file = e.target.files[0];
+export default function OCRUpload({ apiUrl, setCode, setStatus }) {
+  const uploadImage = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
 
     const formData = new FormData();
-
     formData.append("image", file);
 
-    const res = await axios.post(
-      "http://localhost:5000/compile-image",
-      formData
-    );
-
-    setCode(res.data.code);
+    try {
+      setStatus("Reading image...");
+      const res = await axios.post(`${apiUrl}/compile-image`, formData);
+      setCode(res.data.code || res.data.steps?.code || "");
+      setStatus(res.data.extracted_text ? `Extracted: ${res.data.extracted_text}` : "Image processed.");
+    } catch (error) {
+      setStatus(error.response?.data?.error || "Image upload failed.");
+    }
   };
 
   return (
-    <div>
-
-      <h2>Upload Code Image</h2>
-
-      <input
-        type="file"
-        onChange={uploadImage}
-      />
-
-    </div>
+    <section className="panel">
+      <div className="panel-heading">
+        <h2>OCR Upload</h2>
+      </div>
+      <input type="file" accept="image/*" onChange={uploadImage} />
+    </section>
   );
 }
